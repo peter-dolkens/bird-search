@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bird Gallery Viewer</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 1rem;
+    }
+    input[type="text"], label {
+      width: 100%;
+      padding: 0.5rem;
+      font-size: 1rem;
+      margin-bottom: 1rem;
+      display: block;
+    }
+    .bird-row {
+      margin-bottom: 2rem;
+      border-left: 6px solid transparent;
+      padding-left: 1rem;
+      cursor: pointer;
+    }
+    .bird-row.seen {
+      border-left-color: green;
+      background: #f0fff0;
+    }
+    .bird-title {
+      font-size: 1.2rem;
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+    }
+    .image-container {
+      display: flex;
+      overflow-x: auto;
+      gap: 0.5rem;
+    }
+    .image-container img {
+      max-height: 200px;
+      border-radius: 4px;
+    }
+    #drop-zone {
+      border: 2px dashed #888;
+      padding: 2rem;
+      text-align: center;
+      color: #666;
+      margin-bottom: 1rem;
+    }
+    #drop-zone.dragover {
+      border-color: #333;
+      background: #f0f0f0;
+    }
+  </style>
+</head>
+<body>
+  <div id="drop-zone">Drag & drop your species-images.json file here</div>
+  <input type="text" id="search" placeholder="Search for a bird..." disabled>
+  <label><input type="checkbox" id="filter-seen"> Show only seen birds</label>
+  <div id="gallery"></div>
+
+  <script>
+    let data = null;
+    const gallery = document.getElementById('gallery');
+    const search = document.getElementById('search');
+    const dropZone = document.getElementById('drop-zone');
+    const filterSeen = document.getElementById('filter-seen');
+    const seenKey = 'birdGallerySeen';
+    const dataKey = 'birdGalleryData';
+
+    function getSeen() {
+      return JSON.parse(localStorage.getItem(seenKey) || '{}');
+    }
+
+    function toggleSeen(name) {
+      const seen = getSeen();
+      seen[name] = !seen[name];
+      localStorage.setItem(seenKey, JSON.stringify(seen));
+      render(search.value);
+    }
+
+    function render(filter = '') {
+      const seen = getSeen();
+      const showOnlySeen = filterSeen.checked;
+      gallery.innerHTML = '';
+      for (const [name, images] of Object.entries(data)) {
+        const matchesSearch = name.toLowerCase().includes(filter.toLowerCase());
+        const isSeen = !!seen[name];
+        if (matchesSearch && (!showOnlySeen || isSeen)) {
+          const row = document.createElement('div');
+          row.className = 'bird-row';
+          if (isSeen) row.classList.add('seen');
+          row.addEventListener('click', () => toggleSeen(name));
+
+          const title = document.createElement('div');
+          title.className = 'bird-title';
+          title.textContent = name;
+
+          const container = document.createElement('div');
+          container.className = 'image-container';
+          for (const src of images) {
+            const img = document.createElement('img');
+            img.src = src;
+            container.appendChild(img);
+          }
+
+          row.appendChild(title);
+          row.appendChild(container);
+          gallery.appendChild(row);
+        }
+      }
+    }
+
+    function loadStoredData() {
+      const stored = localStorage.getItem(dataKey);
+      if (stored) {
+        try {
+          data = JSON.parse(stored);
+          search.disabled = false;
+          render();
+        } catch (e) {
+          console.warn('Stored JSON was invalid, skipping.');
+        }
+      }
+    }
+
+    // NEW: Try to load species-images.json by default if not in localStorage
+    async function loadDefaultJson() {
+      try {
+        const response = await fetch('species-images.json');
+        if (response.ok) {
+          data = await response.json();
+          localStorage.setItem(dataKey, JSON.stringify(data));
+          search.disabled = false;
+          render();
+        }
+      } catch (err) {
+        // If file not found, do nothing
+      }
+    }
+
+    search.addEventListener('input', () => render(search.value));
+    filterSeen.addEventListener('change', () => render(search.value));
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type === 'application/json') {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            data = JSON.parse(event.target.result);
+            localStorage.setItem(dataKey, JSON.stringify(data));
+            search.disabled = false;
+            render();
+          } catch (err) {
+            alert('Invalid JSON file.');
+          }
+        };
+        reader.readAsText(file);
+      } else {
+        alert('Please drop a valid JSON file.');
+      }
+    });
+
+    // Attempt to preload last uploaded JSON, else load species-images.json
+    if (!loadStoredData()) {
+      loadDefaultJson();
+    }
+  </script>
+</body>
+</html>
